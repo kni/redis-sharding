@@ -4,23 +4,15 @@ package RedisSharding;
 use strict;
 use warnings;
 
+use String::CRC32;
+
 use Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw(cmd2stream get_client_reader get_servers_reader);
+our @EXPORT = qw(cmd2stream get_client_reader get_servers_reader readers);
 
 
 
-sub cmd2stream {
-	join "", 
-		'*', scalar @_, "\r\n",
-		map {
-			if (defined $_) {
-				('$', length $_, "\r\n", $_, "\r\n");
-			} else {
-				('$-1', "\r\n");
-			}
-		} @_;
-}
+
 
 
 
@@ -238,6 +230,239 @@ sub get_servers_reader {
 		}
 	};
 }
+
+
+
+
+
+my %cmd_type = ();
+
+$cmd_type{$_} = 1 for qw(PING AUTH SELECT FLUSHDB FLUSHALL DBSIZE KEYS);
+
+$cmd_type{$_} = 2 for qw(
+EXISTS TYPE EXPIRE PERSIST TTL MOVE
+SET GET GETSET SETNX SETEX
+INCR INCRBY DECR DECRBY APPEND SUBSTR
+RPUSH LPUSH LLEN LRANGE LTRIM LINDEX LSET LREM LPOP RPOP
+SADD SREM SPOP SCARD SISMEMBER SMEMBERS SRANDMEMBER
+ZADD ZREM ZINCRBY ZRANK ZREVRANK ZRANGE ZREVRANGE ZRANGEBYSCORE ZCOUNT ZCARD ZSCORE ZREMRANGEBYRANK ZREMRANGEBYSCORE
+HSET HGET HMGET HMSET HINCRBY HEXISTS HDEL HLEN HKEYS HVALS HGETALL
+);
+
+$cmd_type{$_} = 3 for qw(DEL MGET);   
+$cmd_type{$_} = 4 for qw(MSET MSETNX);
+$cmd_type{$_} = 5 for qw(BLPOP BRPOP);
+
+
+
+sub readers {
+	my ($c, $servers, $write2server, $write2client, $VERBOSE) = @_;
+
+	my @cmd = ();
+	my $cmd;     
+
+	my $client_reader = get_client_reader(
+		sub {
+			my ($cmd_name, @args) = @_;
+			print "REQUEST $cmd_name\n" if $VERBOSE;
+			if (my $cmd_type = $cmd_type{$cmd_name}) {
+				if ($cmd_type == 1) {
+					push @cmd, [$cmd_name];
+					my $buf = cmd2stream($cmd_name, @args);
+					$write2server->($c, undef, $buf);
+				} elsif ($cmd_type == 2) {
+					my $s_addr = key2server($args[0], $servers);
+					push @cmd, [$cmd_name, $s_addr];
+					my $buf = cmd2stream($cmd_name, @args);
+					$write2server->($c, $s_addr, $buf);
+				} elsif ($cmd_type == 3) {
+					my @s_addr = ();
+					my %s_addr = ();
+					for (@args) {
+						my $s_addr = key2server($_, $servers);
+						push @s_addr, $s_addr;
+						push @{$s_addr{$s_addr}}, $_;
+					}
+					push @cmd, [$cmd_name, @s_addr];
+					foreach my $s_addr (keys %s_addr) {
+						my $buf = cmd2stream($cmd_name, @{$s_addr{$s_addr}});
+						$write2server->($c, $s_addr, $buf);
+					}
+				} elsif ($cmd_type == 4) {
+					my @s_addr = ();
+					my %s_addr = ();
+					my $i = 0;
+					while ($i <= $#args) {
+						my $key   = $args[$i++];
+						my $value = $args[$i++];
+						my $s_addr = key2server($key, $servers);
+						push @s_addr, $s_addr;
+						push @{$s_addr{$s_addr}}, $key, $value;
+					}
+					push @cmd, [$cmd_name, @s_addr];
+					foreach my $s_addr (keys %s_addr) {
+						my $buf = cmd2stream($cmd_name, @{$s_addr{$s_addr}});
+						$write2server->($c, $s_addr, $buf);
+					}
+				} elsif ($cmd_type == 5) {
+					my $timeout = $args[-1];
+					my @s_addr = ();
+					my %s_addr = ();
+					for my $i (0 .. $#args - 1) {
+						my $s_addr = key2server($args[$i], $servers);
+						push @s_addr, $s_addr;
+						push @{$s_addr{$s_addr}}, $args[$i];
+					}
+					if (keys %s_addr > 1) {
+						$write2client->($c, "-ERR Keys of the '$cmd_name' command should be on one node; use key tags\r\n");
+					} else {
+						push @cmd, [$cmd_name, @s_addr];
+						foreach my $s_addr (keys %s_addr) {
+							my $buf = cmd2stream($cmd_name, @{$s_addr{$s_addr}}, $timeout);
+							$write2server->($c, $s_addr, $buf);
+						}
+					}
+				}
+			} else {
+				$write2client->($c, "-ERR unsupported command '$cmd_name'\r\n");
+			}
+		}
+	);
+
+	my $resp_type = "";
+	my %resp_line      = ();
+	my %resp_bulk_size = ();
+	my %resp_bulk_args = ();
+	my $servers_reader = get_servers_reader(
+		DEBUG   => 0,
+		servers => $servers,
+		sub_cmd => sub {
+			if ($cmd = shift @cmd) {
+				my ($cmd_name, @s_addr) = @$cmd;
+				if (@s_addr) {
+					my %s_addr = map { $_ => 1 } @s_addr;
+					return $cmd_name, keys %s_addr;
+				} else {
+					return $cmd_name;
+				}
+			}
+		},
+		sub_response_type          => sub { ($resp_type) = @_ },
+		sub_line_response          => sub { my ($s, $resp_line) = @_; $resp_line{$s} = $resp_line },
+		sub_bulk_response_size     => sub { my ($s, $resp_bulk_size) = @_; $resp_bulk_size{$s} = $resp_bulk_size },
+		sub_bulk_response_size_all => sub {
+			if ($$cmd[0] eq "KEYS") {
+				my $resp_bulk_size;
+				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
+				if (defined $resp_bulk_size) {
+				 	$write2client->($c, "*$resp_bulk_size\r\n");
+				} else {
+					$write2client->($c, "*-1\r\n");
+				}
+			}
+		},
+		sub_bulk_response_arg      => sub {
+			my ($s, $arg) = @_;
+			if ($$cmd[0] eq "KEYS") {
+				if (defined $arg) {
+					$write2client->($c, join "", '$', length $arg, "\r\n", $arg, "\r\n");
+				} else {
+					$write2client->($c, "\$-1\r\n");
+				}
+			} else {
+				push @{$resp_bulk_args{$s}}, $arg;
+			}
+		},
+		sub_response_received      => sub {
+			if ($resp_type eq "line") {
+				my @v = values %resp_line;
+				if (@v == 1) {
+					$write2client->($c, "$v[0]\r\n");
+				} else {
+					my $v = shift @v;
+					if ($v =~ m/^:\d+/ ) {
+						my $sum = 0;
+						$sum += $_ for map { m/^:(\d+)/ } $v, @v;
+						$write2client->($c, ":$sum\r\n");
+					} else {
+						if (grep { $v ne $_ } @v) {
+							$write2client->($c, "-ERR nodes return different results\r\n");
+						} else {
+							$write2client->($c, "$v\r\n");
+						}
+					}
+				}
+			} elsif ($resp_type eq "bulk") {
+
+				if ($cmd_type{$$cmd[0]} != 2) {
+					warn "bulk cmd $$cmd[0] with $cmd_type{$$cmd[0]} != 2";
+				}
+
+				if (keys %resp_bulk_size > 1) {
+					warn "logic error";
+				} else {
+					my $s_addr = (keys %resp_bulk_size)[0];
+					if (defined $resp_bulk_size{$s_addr}) {
+						my $arg = $resp_bulk_args{$s_addr}[0];
+						my $stream = join "", '$', length $arg, "\r\n", $arg, "\r\n";
+						$write2client->($c, $stream);
+					} else {
+						$write2client->($c, "\$-1\r\n");
+					}
+				}
+
+			} elsif ($resp_type eq "multi_bulk" and $$cmd[0] ne "KEYS") {
+				my $resp_bulk_size;
+				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
+				if (defined $resp_bulk_size) {
+					my ($cmd_name, @s_addr) = @$cmd;
+					my @args = ();
+					if (@s_addr) {
+						foreach my $s_addr (@s_addr) {
+							push @args, shift @{$resp_bulk_args{$s_addr}};
+						}
+					} else {
+						foreach (values %resp_bulk_args) {
+							push @args, @$_;
+						}
+					}
+				 	$write2client->($c, cmd2stream(@args));
+				} else {
+					$write2client->($c, "*-1\r\n");
+				}
+			}
+			print "RESPONSE from all on $$cmd[0]\n" if $VERBOSE;
+			$resp_type = "";
+			%resp_line      = ();
+			%resp_bulk_size = ();
+			%resp_bulk_args = ();
+		},
+	);
+
+	return $client_reader, $servers_reader;
+}
+
+
+
+sub key2server {
+	my ($key, $servers) = @_;
+	$$servers[crc32($key =~ m/{(.+)}$/ ? $1 : $key) % @$servers];
+}
+
+
+
+sub cmd2stream {
+	join "", 
+		'*', scalar @_, "\r\n",
+		map {
+			if (defined $_) {
+				('$', length $_, "\r\n", $_, "\r\n");
+			} else {
+				('$-1', "\r\n");
+			}
+		} @_;
+}
+
 
 
 1;
