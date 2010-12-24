@@ -9,6 +9,8 @@ use String::CRC32;
 
 use RedisSharding;
 
+$SIG{PIPE} = "IGNORE";
+
 my $VERBOSE = 0;
 
 
@@ -24,9 +26,9 @@ unless ($nodes) {
 Parameter 'nodes' is required.
 
 Using example:
-perl $0                             --nodes=10.1.1.2:6380,10.1.1.3:6380,10.1.1.4:6380
-perl $0                 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,10.1.1.4:6380
-perl $0 --host=10.1.1.1 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,10.1.1.4:6380
+perl $0                             --nodes=10.1.1.2:6380,10.1.1.3:6380,...
+perl $0                 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
+perl $0 --host=10.1.1.1 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
 EOD
 	exit;
 }
@@ -197,8 +199,29 @@ sub readers {
 		sub_response_type          => sub { ($resp_type) = @_ },
 		sub_line_response          => sub { my ($s, $resp_line) = @_; $resp_line{$s} = $resp_line },
 		sub_bulk_response_size     => sub { my ($s, $resp_bulk_size) = @_; $resp_bulk_size{$s} = $resp_bulk_size },
-		sub_bulk_response_size_all => sub { },
-		sub_bulk_response_arg      => sub { my ($s, $arg) = @_; push @{$resp_bulk_args{$s}}, $arg },
+		sub_bulk_response_size_all => sub {
+			if ($$cmd[0] eq "KEYS") {
+				my $resp_bulk_size;
+				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
+				if (defined $resp_bulk_size) {
+				 	write2client($c, "*$resp_bulk_size\r\n");
+				} else {
+					write2client($c, "*-1\r\n");
+				}
+			}
+		},
+		sub_bulk_response_arg      => sub {
+			my ($s, $arg) = @_;
+			if ($$cmd[0] eq "KEYS") {
+				if (defined $arg) {
+					write2client($c, join "", '$', length $arg, "\r\n", $arg, "\r\n");
+				} else {
+					write2client($c, "\$-1\r\n");
+				}
+			} else {
+				push @{$resp_bulk_args{$s}}, $arg;
+			}
+		},
 		sub_response_received      => sub {
 			if ($resp_type eq "line") {
 				my @v = values %resp_line;
@@ -237,7 +260,7 @@ sub readers {
 					}
 				}
 
-			} elsif ($resp_type eq "multi_bulk") {
+			} elsif ($resp_type eq "multi_bulk" and $$cmd[0] ne "KEYS") {
 				my $resp_bulk_size;
 				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
 				if (defined $resp_bulk_size) {

@@ -119,6 +119,7 @@ sub get_servers_reader {
 	my %bulk_args     = ();
 	my %bulk_args_had = ();
 	my %bulk_size     = ();
+	my $size_all      = 0; 
 	
 	my $sub_clean = sub {
 		($cmd, @s) = ();
@@ -127,6 +128,7 @@ sub get_servers_reader {
 		%bulk_args     = ();
 		%bulk_args_had = ();
 		%bulk_size     = ();
+		$size_all      = 0;
 	};
 
 
@@ -221,12 +223,13 @@ sub get_servers_reader {
 				}
 			}
  
-			if ($reply_type =~ m/^(multi_)?bulk$/ and @s eq keys %bulk_args) {
-				$args{sub_bulk_response_size_all}->(1);
+			if (not $size_all and $reply_type =~ m/^(multi_)?bulk$/ and @s eq keys %bulk_args) {
+				$args{sub_bulk_response_size_all}->();
+				$size_all = 1;
 			}
 			if (@s eq keys %cmd) {
 				print "RESPONSE from all on $cmd\n" if $args{DEBUG};
-				$args{sub_response_received}->(1);
+				$args{sub_response_received}->();
 				$sub_clean->();
 				$next = 1;
 			}
