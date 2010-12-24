@@ -39,13 +39,6 @@ my $blksize = 1024 * 16;
 my $sel_r = IO::Select->new();
 my $sel_w = IO::Select->new();
 
-my $listener = IO::Socket::INET->new(
-	Proto => 'tcp', Blocking => 0,
-	LocalHost => $local_host, LocalPort => $local_port,
-	Listen => 20, ReuseAddr => 1
-) or die $!;
-
-$sel_r->add($listener);
 
 
 my %c2s = ();
@@ -95,6 +88,15 @@ sub write2server {
 		$sel_w->add($s) unless $sel_w->exists($s);
 	}
 }
+
+
+my $listener = IO::Socket::INET->new(
+	Proto => 'tcp', Blocking => 0,
+	LocalHost => $local_host, LocalPort => $local_port,
+	Listen => 20, ReuseAddr => 1
+) or die $!;
+$sel_r->add($listener);
+
 
 
 RESET: while ($sel_r->count()) {
@@ -152,7 +154,7 @@ RESET: while ($sel_r->count()) {
 				unless (length $buf) {
 					$sel_w->remove($fh);
 				}
-			}		
+			}
 		} elsif ($c2s{$fh}) {
 			my $buf = $c2buf{$fh};
 			my $len = syswrite $fh, $buf, $blksize;
@@ -162,9 +164,7 @@ RESET: while ($sel_r->count()) {
 				unless (length $buf) {
 					$sel_w->remove($fh);
 				}
-			}		
+			}
 		}
 	}
 }
-
-

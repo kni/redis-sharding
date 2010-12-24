@@ -163,7 +163,7 @@ sub s_w_event_cb {
 				unless (length $buf) {
 					delete $fh2ww{$fh};
 				}
-			}		
+			}
 }
 
 
@@ -179,8 +179,9 @@ sub c_w_event_cb {
 				unless (length $buf) {
 					delete $fh2ww{$fh};
 				}
-			}		
+			}
 }
+
 
 
 EV::loop;
