@@ -1,17 +1,20 @@
 Redis Sharding
 **************
 
-Redis Sharding - multiplexed server to sharing data on Redis server set.
-
 https://github.com/kni/redis-sharding
 
-                             /- Redis (node 1)
-Client 1 ---                /-- Redis (node 2)
-             Redis Sharding --- Redis (node 3)
-Client 2 ---                \-- Redis (node 4)
-                             \- Redis (node 5)
+Redis Sharding is a multiplexed proxy-server, designed to work with the database divided to several servers.
+It's a temporary substitution of Redis Cluster that is under development. 
 
-Sharding is done based on CRC32 checksum of key or key tag.
+Redis Sharding is used for horizontal Redis database scaling (with connecting of additional servers) as long as load distribution between the cores on the multiprocessor servers (as Redis server is single-threaded, several copies of the server can be run, one for each free core).
+
+                              /- Redis (node 1)
+ Client 1 ---                /-- Redis (node 2)
+              Redis Sharding --- Redis (node 3)
+ Client 2 ---                \-- Redis (node 4)
+                              \- Redis (node 5)
+
+Sharding is done based on the CRC32 checksum of a key or key tag.
 
 The majority of the commands are supported except the key renaming commands, 
 commands of working with sets, transactions, subscription and, of course, server configure. 
@@ -19,14 +22,10 @@ commands of working with sets, transactions, subscription and, of course, server
 For BLPOP and BRPOP commands all the keys should be on one node, that is done with the key tag.
 Also for this commands Redis timeout 0 is recommended. 
 
-Perl 5.10 or higher is needed with the following modes installed: String::CRC32, EV.
+Perl 5.10 or higher is needed with the following modules installed: String::CRC32, EV.
 
 Launch:
 
  perl redis_sharding.pl                             --nodes=10.1.1.2:6380,10.1.1.3:6380,...
  perl redis_sharding.pl                 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
  perl redis_sharding.pl --host=10.1.1.1 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
-
-
-P.S.
-Redis Sharding is released in December, 2010, because Redis Cluster will be realeased in March-June, 2011
