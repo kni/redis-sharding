@@ -112,7 +112,7 @@ sub get_servers_reader {
 	my %bulk_args_had = ();
 	my %bulk_size     = ();
 	my $size_all      = 0; 
-	
+
 	my $sub_clean = sub {
 		($cmd, @s) = ();
 		%cmd = ();
@@ -152,7 +152,7 @@ sub get_servers_reader {
 							substr $buf{$s}, 0, $+[0], "";
 							$next = 1;
 						} elsif ($reply_type =~ m/^(|multi_bulk)$/ and not exists $bulk_args{$s} and $buf{$s} =~ m/^$re_bulk_1/) {
-							print "RESPONSE from $s on $cmd: *$1}\\r\\n\n" if $args{DEBUG};
+							print "RESPONSE from $s on $cmd: *$1\\r\\n\n" if $args{DEBUG};
 							$reply_type or $args{sub_response_type}->("multi_bulk");
 							$reply_type ||= "multi_bulk";
 							if ($1 == -1) {
@@ -172,7 +172,7 @@ sub get_servers_reader {
 							substr $buf{$s}, 0, $+[0], "";
 							$next = 1;
 						} elsif ($reply_type =~ m/^(|bulk)$/ and not exists $bulk_args{$s} and $buf{$s} =~ m/^$re_bulk_2/) {
-							print "RESPONSE from $s on $cmd: \$$1}\\r\\n\n" if $args{DEBUG};
+							print "RESPONSE from $s on $cmd: \$$1\\r\\n\n" if $args{DEBUG};
 							$reply_type or $args{sub_response_type}->("bulk");
 							$reply_type ||= "bulk";
 							if ($1 == -1) {
@@ -199,13 +199,14 @@ sub get_servers_reader {
 							substr $buf{$s}, 0, $+[0], "";
 							$next = 1;
 						} elsif ($reply_type =~ m/^(multi_)?bulk$/ and defined $bulk_size{$s}) {
-							if ($buf{$s} =~ m/^(.{$bulk_size{$s}})\r\n/s) {
-								print "RESPONSE from $s on $cmd: $1\\r\\n\n" if $args{DEBUG};
-								$args{sub_bulk_response_arg}->($s, $1);
+							if ((index $buf{$s}, "\r\n", $bulk_size{$s} - 1) == $bulk_size{$s}) {
+								my $buf = substr $buf{$s}, 0, $bulk_size{$s};
+								print "RESPONSE from $s on $cmd: $buf\\r\\n\n" if $args{DEBUG};
+								$args{sub_bulk_response_arg}->($s, $buf);
 								$bulk_args_had{$s}++;
 								$cmd{$s} = 1 if $bulk_args{$s} == $bulk_args_had{$s};
+								substr $buf{$s}, 0, $bulk_size{$s} + 2, "";
 								delete $bulk_size{$s};
-								substr $buf{$s}, 0, $+[0], "";
 								$next = 1;
 							} elsif (length $buf{$s} >= $bulk_size{$s} + 2) {
 								warn "PARSING ERROR for $cmd";
@@ -214,7 +215,7 @@ sub get_servers_reader {
 					}
 				}
 			}
- 
+
 			if (not $size_all and $reply_type =~ m/^(multi_)?bulk$/ and @s eq keys %bulk_args) {
 				$args{sub_bulk_response_size_all}->();
 				$size_all = 1;
@@ -452,7 +453,7 @@ sub key2server {
 
 
 sub cmd2stream {
-	join "", 
+	join "",
 		'*', scalar @_, "\r\n",
 		map {
 			if (defined $_) {

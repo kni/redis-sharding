@@ -4,7 +4,7 @@ Redis Sharding
 https://github.com/kni/redis-sharding
 
 Redis Sharding is a multiplexed proxy-server, designed to work with the database divided to several servers.
-It's a temporary substitution of Redis Cluster that is under development. 
+It's a temporary substitution of Redis Cluster (http://redis.io) that is under development.
 
 Redis Sharding is used for horizontal Redis database scaling (with connecting of additional servers) as long as load distribution between the cores on the multiprocessor servers (as Redis server is single-threaded, several copies of the server can be run, one for each free core).
 
@@ -29,3 +29,26 @@ Launch:
  perl redis_sharding.pl                             --nodes=10.1.1.2:6380,10.1.1.3:6380,...
  perl redis_sharding.pl                 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
  perl redis_sharding.pl --host=10.1.1.1 --port=6379 --nodes=10.1.1.2:6380,10.1.1.3:6380,...
+
+
+Resharding
+----------
+
+Cluster configuration change on the fly is not supported. We are looking forward for Redis Cluster release. 
+
+To copy data to a new cluster use a new utility resharding.pl.
+
+For example, there is a cluster consisting of two servers: A1 and A2. It is served with redis_sharding, that is launched as
+
+ perl redis_sharding.pl --nodes=A1,A2
+
+We want to copy data from the base 9 to a new cluster of 5 servers: B1, B2, B3, B4 and B5.
+
+To do this we need to stop redis_sharding.pl and run resharding.pl for each server of the cluster: 
+
+ perl resharding.pl --db=9 --from=A1 --nodes=B1,B2,B3,B4,B5
+ perl resharding.pl --db=9 --from=A2 --nodes=B1,B2,B3,B4,B5
+
+After copying have been done, run redis_sharding.pl for a new cluster: 
+
+perl redis_sharding.pl --nodes=B1,B2,B3,B4,B5
