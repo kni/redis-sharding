@@ -77,7 +77,7 @@ sub r_event_cb {
 		delete $fh2rw{$fh};
 		delete $fh2ww{$fh};
 		close $fh;
-		warn "ERROR: Redis server close connect";
+		warn "ERROR: Redis server '$fh2name{$fh}' close connection";
 		exit;
 	}
 };
@@ -225,6 +225,7 @@ sub counter_decr {
 				} elsif ($v eq "+hash") {
 					fh_type_send_cmd("HGETALL", $k);
 				}
+				counter_decr();
 			}
 		},
 		sub_bulk_response_size     => sub { },
