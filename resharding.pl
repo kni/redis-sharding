@@ -338,12 +338,7 @@ foreach my $addr (keys %addr2fh) {
 		},
 		sub_response_type          => sub { my ($type) = @_ },
 		sub_line_response          => sub { my ($s, $v) = @_;
-			if ($v =~ m/^-ERR/) {
-				use Data::Dumper;
-				warn "ERROR on $$cmd[0]: ", $v;
-				warn Dumper $cmd;
-				exit;
-			}
+			$v =~ m/^-ERR/ and die "ERROR on $$cmd[0]: ", $v;
 		},
 		sub_bulk_response_size     => sub { },
 		sub_bulk_response_size_all => sub { },
@@ -373,7 +368,6 @@ fh_keys_send_cmd("SELECT", $db);
 fh_type_send_cmd("SELECT", $db);
 
 fh_nodes_send_cmd(undef, "SELECT", $db);
-fh_nodes_send_cmd(undef, "FLUSHDB");
 
 fh_keys_send_cmd("KEYS", "*");
 
