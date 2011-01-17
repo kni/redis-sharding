@@ -54,7 +54,6 @@ foreach (keys %addr2fh) {
 	$fh2name{$addr2fh{$_}} = $_;
 }
 
-
 sub w_event_cb {
 	my $w = shift;
 	my $fh = $w->fh;
@@ -83,11 +82,16 @@ sub r_event_cb {
 };
 
 
-my $done_cnt = 0;
+my $progress = 0;
 my $flag_all_keys;
 
 my $counter = 0;
 my $fh_keys_w_stoped = 0;
+my $counter_keys = 0;
+my $counter_type = 0;
+my $counter_node_query = 0;
+my $counter_node_resp  = 0;
+
 sub counter_incr {
 	$counter++;
 	if (not $fh_keys_w_stoped and $counter > 100) {
@@ -102,11 +106,20 @@ sub counter_decr {
 		$fh2rw{$fh_keys}->start();
 	}
 	if ($flag_all_keys and $counter == 0) {
-		print "The End ($done_cnt).\n";
-		exit;
+		unless (grep { $_ } map { length $_ } values %fh2buf) {
+			print "\nDONE ($progress).\n";
+			counter_show();
+			exit;
+		}
 	}
 }
 
+sub counter_show {
+	print "counter_keys $counter_keys\n";
+	print "counter_type $counter_type\n";
+	print "counter_node_query $counter_node_query\n";
+	print "counter_node_resp  $counter_node_resp\n";
+}
 
 
 {
@@ -114,10 +127,12 @@ sub counter_decr {
 	my @allcmd = ();
 
 	my $send_cmd = sub {
+		if (not $fh_keys_w_stoped) {
 		if (my $next_cmd = shift @allcmd) {
 			$fh2buf{$fh_keys} .= cmd2stream(@$next_cmd);
 			push @cmd, [$$next_cmd[0]];
 			$fh2ww{$fh_keys} ||= EV::io($fh_keys, EV::WRITE, \&w_event_cb);
+		}
 		}
 	};
 
@@ -136,10 +151,15 @@ sub counter_decr {
 		},
 		sub_response_type          => sub { my ($type) = @_ },
 		sub_line_response          => sub { my ($s, $v) = @_;
-			$v =~ m/^-ERR/ and die "ERROR: ", $v;
+			$v =~ m/^-ERR/ and die "ERROR on $$cmd[0]: ", $v;
 		},
 		sub_bulk_response_size     => sub { my ($s, $v) = @_;
 			if ($$cmd[0] eq "KEYS") {
+				print "DB $db contain $v keys.\n";
+				unless ($v) {
+					print "DONE.\n";
+					exit;
+				}
 			} else {
 				$v //= "-1"; print "RESPONSE from $s on $$cmd[0]; bulk size: $v\n"
 			}
@@ -151,6 +171,7 @@ sub counter_decr {
 				if (defined $v) {
 					type_req($v);
 					counter_incr();
+					$counter_keys++;
 				}
 			} else {
 				$v //= "-1";
@@ -209,7 +230,7 @@ sub counter_decr {
 		},
 		sub_response_type          => sub { my ($type) = @_ },
 		sub_line_response          => sub { my ($s, $v) = @_;
-			$v =~ m/^-ERR/ and die "ERROR: ", $v;
+			$v =~ m/^-ERR/ and die "ERROR on $$cmd[0]: ", $v;
 			if ($$cmd[0] eq "TYPE") {
 				my $k = shift @k;
 				print "$s: $$cmd[0]: $k is $v\n" if $DEBUG;
@@ -224,8 +245,10 @@ sub counter_decr {
 					fh_type_send_cmd("ZRANGE", $k, 0, -1, "WITHSCORES");
 				} elsif ($v eq "+hash") {
 					fh_type_send_cmd("HGETALL", $k);
+				} else {
+					counter_decr();
+					$counter_keys--;
 				}
-				counter_decr();
 			}
 		},
 		sub_bulk_response_size     => sub { },
@@ -270,8 +293,10 @@ sub counter_decr {
 					require Data::Dumper;
 				 	print Data::Dumper::Dumper([$$cmd[0], $k, @v]);
 				}
-				counter_decr();
 				$to_nodes->($addr, $k, @v);
+				print "." unless ++$progress % 1000;
+				counter_decr();
+				$counter_type++;
 			}
 			@v = ();
 			$send_cmd->();
@@ -313,18 +338,20 @@ foreach my $addr (keys %addr2fh) {
 		},
 		sub_response_type          => sub { my ($type) = @_ },
 		sub_line_response          => sub { my ($s, $v) = @_;
-			$v =~ m/^-ERR/ and die "ERROR: ", $v;
+			if ($v =~ m/^-ERR/) {
+				use Data::Dumper;
+				warn "ERROR on $$cmd[0]: ", $v;
+				warn Dumper $cmd;
+				exit;
+			}
 		},
 		sub_bulk_response_size     => sub { },
 		sub_bulk_response_size_all => sub { },
 		sub_bulk_response_arg      => sub { },
 		sub_response_received      => sub {
 			$send_cmd->();
-			if ($$cmd[0] ne "SELECT") {
-				counter_decr();
-				$done_cnt++;
-				print "." unless $done_cnt % 1000;
-			}
+			$counter_node_resp++;
+			counter_decr();
 		},
 		DEBUG => 0,
 	);
@@ -336,9 +363,8 @@ sub fh_nodes_send_cmd {
 	my ($addr, @args) = @_;
 	foreach my $fh ($addr ? $addr2fh{$addr} : values %addr2fh) {
 		$fh2nodes_send_cmd{$fh}->(@args);
-		if ($args[0] ne "SELECT") {
-			counter_incr();
-		}
+		counter_incr();
+		$counter_node_query++;
 	}
 }
 
@@ -347,9 +373,9 @@ fh_keys_send_cmd("SELECT", $db);
 fh_type_send_cmd("SELECT", $db);
 
 fh_nodes_send_cmd(undef, "SELECT", $db);
+fh_nodes_send_cmd(undef, "FLUSHDB");
 
 fh_keys_send_cmd("KEYS", "*");
-
 
 
 EV::loop;
