@@ -136,7 +136,7 @@ sub get_servers_reader {
 				@s or @s = @{$args{servers}};
 			}
 
-			my $re_line   = qr/([+]\w+?|:\d+)\r\n/;
+			my $re_line   = qr/([-+].+?|:\d+)\r\n/;
 			my $re_bulk_1 = qr/\*(\d+|-1)\r\n/;
 			my $re_bulk_2 = qr/\$(\d+|-1)\r\n/;
 
