@@ -52,3 +52,5 @@ To do this we need to stop redis_sharding.pl and run resharding.pl for each serv
 After copying have been done, run redis_sharding.pl for a new cluster: 
 
 perl redis_sharding.pl --nodes=B1,B2,B3,B4,B5
+
+If a flag --flushdb is set, the FLUSHDB command is sent to all cluster nodes before data copying.

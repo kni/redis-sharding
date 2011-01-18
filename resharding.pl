@@ -13,6 +13,7 @@ GetOptions(
 	"db=i"    => \ my $db,
 	"from=s"  => \ my $from,
 	"nodes=s" => \ my $nodes,
+	"flushdb" => \ my $flushdb,
 );
 
 unless (defined $db and $from and $nodes) {
@@ -293,7 +294,7 @@ sub counter_show {
 					require Data::Dumper;
 				 	print Data::Dumper::Dumper([$$cmd[0], $k, @v]);
 				}
-				$to_nodes->($addr, $k, @v);
+				$to_nodes->($addr, $k, @v) if @v;
 				print "." unless ++$progress % 1000;
 				counter_decr();
 				$counter_type++;
@@ -368,6 +369,7 @@ fh_keys_send_cmd("SELECT", $db);
 fh_type_send_cmd("SELECT", $db);
 
 fh_nodes_send_cmd(undef, "SELECT", $db);
+fh_nodes_send_cmd(undef, "FLUSHDB") if $flushdb;
 
 fh_keys_send_cmd("KEYS", "*");
 
