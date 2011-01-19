@@ -131,7 +131,7 @@ sub c_r_event_cb {
 				my $rv = $c2client_reader{$fh}->($buf);
 				unless ($rv) {
 					warn "ERROR: unified protocol error";
-					write2client($fh, "-ERR unified protocol error\r\n");
+					write2client($fh, "-ERR unified protocol error\015\012");
 				}
 			} elsif (defined $len) {
 				clean_from_client($fh);

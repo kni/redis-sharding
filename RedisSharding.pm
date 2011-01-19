@@ -37,10 +37,10 @@ sub get_client_reader {
 		$buf .= $_buf;
 		NEXT: {
 			if (not $args_cnt) {
-				$buf =~ s/^(\r\n)+//;
+				$buf =~ s/^(\015\012)+//;
 				return 1 unless $buf;
 				if ((index $buf, '*', 0) == 0) {
-					if ((my $_i = index $buf, "\r\n", 1) > -1) {
+					if ((my $_i = index $buf, "\015\012", 1) > -1) {
 						$args_cnt = substr $buf, 1, $_i - 1;
 						print "args_cnt: $args_cnt\n" if $DEBUG;
 						$i = $_i + 2;
@@ -54,7 +54,7 @@ sub get_client_reader {
 			return 1 unless length $buf > $i;
 			if ($args_cnt and not $size_next_arg) {
 				if ((index $buf, '$', $i) == $i) {
-					if ((my $_i = index $buf, "\r\n", $i + 1) > -1) {
+					if ((my $_i = index $buf, "\015\012", $i + 1) > -1) {
 						$size_next_arg = substr $buf, $i + 1, $_i - ($i + 1);
 						print "size_next_arg: $size_next_arg\n" if $DEBUG;
 						$i = $_i + 2;
@@ -67,7 +67,7 @@ sub get_client_reader {
 			}
 			return 1 unless length $buf > $i;
 			if ($args_cnt and $size_next_arg) {
-				if ((index $buf, "\r\n", $i + $size_next_arg) == $i + $size_next_arg) {
+				if ((index $buf, "\015\012", $i + $size_next_arg) == $i + $size_next_arg) {
 					my $arg = substr $buf, $i, $size_next_arg;
 					print "arg: $arg\n" if $DEBUG;
 					push @args, $arg;
@@ -136,9 +136,9 @@ sub get_servers_reader {
 				@s or @s = @{$args{servers}};
 			}
 
-			my $re_line   = qr/([-+].+?|:\d+)\r\n/;
-			my $re_bulk_1 = qr/\*(\d+|-1)\r\n/;
-			my $re_bulk_2 = qr/\$(\d+|-1)\r\n/;
+			my $re_line   = qr/([-+].+?|:\d+)\015\012/;
+			my $re_bulk_1 = qr/\*(\d+|-1)\015\012/;
+			my $re_bulk_2 = qr/\$(\d+|-1)\015\012/;
 
 			foreach my $s (@s) {
 				unless ($cmd{$s}) {
@@ -199,7 +199,7 @@ sub get_servers_reader {
 							substr $buf{$s}, 0, $+[0], "";
 							$next = 1;
 						} elsif ($reply_type =~ m/^(multi_)?bulk$/ and defined $bulk_size{$s}) {
-							if ((index $buf{$s}, "\r\n", $bulk_size{$s} - 1) == $bulk_size{$s}) {
+							if ((index $buf{$s}, "\015\012", $bulk_size{$s} - 1) == $bulk_size{$s}) {
 								my $buf = substr $buf{$s}, 0, $bulk_size{$s};
 								print "RESPONSE from $s on $cmd: $buf\\r\\n\n" if $args{DEBUG};
 								$args{sub_bulk_response_arg}->($s, $buf);
@@ -315,7 +315,7 @@ sub readers {
 						push @{$s_addr{$s_addr}}, $args[$i];
 					}
 					if (keys %s_addr > 1) {
-						$write2client->($c, "-ERR Keys of the '$cmd_name' command should be on one node; use key tags\r\n");
+						$write2client->($c, "-ERR Keys of the '$cmd_name' command should be on one node; use key tags\015\012");
 					} else {
 						push @cmd, [$cmd_name, @s_addr];
 						foreach my $s_addr (keys %s_addr) {
@@ -325,7 +325,7 @@ sub readers {
 					}
 				}
 			} else {
-				$write2client->($c, "-ERR unsupported command '$cmd_name'\r\n");
+				$write2client->($c, "-ERR unsupported command '$cmd_name'\015\012");
 			}
 		}
 	);
@@ -356,9 +356,9 @@ sub readers {
 				my $resp_bulk_size;
 				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
 				if (defined $resp_bulk_size) {
-				 	$write2client->($c, "*$resp_bulk_size\r\n");
+				 	$write2client->($c, "*$resp_bulk_size\015\012");
 				} else {
-					$write2client->($c, "*-1\r\n");
+					$write2client->($c, "*-1\015\012");
 				}
 			}
 		},
@@ -366,9 +366,9 @@ sub readers {
 			my ($s, $arg) = @_;
 			if ($$cmd[0] eq "KEYS") {
 				if (defined $arg) {
-					$write2client->($c, join "", '$', length $arg, "\r\n", $arg, "\r\n");
+					$write2client->($c, join "", '$', length $arg, "\015\012", $arg, "\015\012");
 				} else {
-					$write2client->($c, "\$-1\r\n");
+					$write2client->($c, "\$-1\015\012");
 				}
 			} else {
 				push @{$resp_bulk_args{$s}}, $arg;
@@ -378,18 +378,18 @@ sub readers {
 			if ($resp_type eq "line") {
 				my @v = values %resp_line;
 				if (@v == 1) {
-					$write2client->($c, "$v[0]\r\n");
+					$write2client->($c, "$v[0]\015\012");
 				} else {
 					my $v = shift @v;
 					if ($v =~ m/^:\d+/ ) {
 						my $sum = 0;
 						$sum += $_ for map { m/^:(\d+)/ } $v, @v;
-						$write2client->($c, ":$sum\r\n");
+						$write2client->($c, ":$sum\015\012");
 					} else {
 						if (grep { $v ne $_ } @v) {
-							$write2client->($c, "-ERR nodes return different results\r\n");
+							$write2client->($c, "-ERR nodes return different results\015\012");
 						} else {
-							$write2client->($c, "$v\r\n");
+							$write2client->($c, "$v\015\012");
 						}
 					}
 				}
@@ -405,10 +405,10 @@ sub readers {
 					my $s_addr = (keys %resp_bulk_size)[0];
 					if (defined $resp_bulk_size{$s_addr}) {
 						my $arg = $resp_bulk_args{$s_addr}[0];
-						my $stream = join "", '$', length $arg, "\r\n", $arg, "\r\n";
+						my $stream = join "", '$', length $arg, "\015\012", $arg, "\015\012";
 						$write2client->($c, $stream);
 					} else {
-						$write2client->($c, "\$-1\r\n");
+						$write2client->($c, "\$-1\015\012");
 					}
 				}
 
@@ -429,7 +429,7 @@ sub readers {
 					}
 				 	$write2client->($c, cmd2stream(@args));
 				} else {
-					$write2client->($c, "*-1\r\n");
+					$write2client->($c, "*-1\015\012");
 				}
 			}
 			print "RESPONSE from all on $$cmd[0]\n" if $VERBOSE;
@@ -454,12 +454,12 @@ sub key2server {
 
 sub cmd2stream {
 	join "",
-		'*', scalar @_, "\r\n",
+		'*', scalar @_, "\015\012",
 		map {
 			if (defined $_) {
-				('$', length $_, "\r\n", $_, "\r\n");
+				('$', length $_, "\015\012", $_, "\015\012");
 			} else {
-				('$-1', "\r\n");
+				('$-1', "\015\012");
 			}
 		} @_;
 }
