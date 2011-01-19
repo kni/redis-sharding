@@ -35,9 +35,12 @@ EOD
 my @servers = split /\s*,\s*/, $nodes;
 
 my $blksize = 1024 * 16;
+my $max_buf_length = 1024 * 100;
 
 my %fh2rw = ();
 my %fh2ww = ();
+
+my %c2sw_stoped = ();
 
 
 
@@ -78,6 +81,12 @@ sub clean_from_client {
 sub write2client {
 	my ($c, $buf) = @_;
 	$c2buf{$c} .= $buf;
+	if (length $c2buf{$c} > $max_buf_length) {
+		$c2sw_stoped{$c} = 1;
+		foreach my $sw (map { $fh2rw{$_} } values %{$c2s{$c}}) {
+			$sw->stop();
+		}
+	}
 	$fh2ww{$c} ||= EV::io($c, EV::WRITE, \&c_w_event_cb);
 }
 
@@ -178,6 +187,11 @@ sub c_w_event_cb {
 				$c2buf{$fh} = $buf;
 				unless (length $buf) {
 					delete $fh2ww{$fh};
+				} elsif ($c2sw_stoped{$fh} and length $c2buf{$fh} < $max_buf_length * 0.9) {
+					foreach my $sw (map { $fh2rw{$_} } values %{$c2s{$fh}}) {
+						$sw->start();
+					}
+					$c2sw_stoped{$fh} = 0;
 				}
 			}
 }
