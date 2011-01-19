@@ -424,10 +424,12 @@ sub readers {
 				if (defined $resp_bulk_size) {
 					my ($cmd_name, @s_addr) = @$cmd;
 					my @args = ();
-					if (@s_addr) {
+					if (@s_addr > 1) {
 						foreach my $s_addr (@s_addr) {
 							push @args, shift @{$resp_bulk_args{$s_addr}};
 						}
+					} elsif (@s_addr) {
+						push @args, map { @$_ } values %resp_bulk_args;
 					} else {
 						foreach (values %resp_bulk_args) {
 							push @args, @$_;
