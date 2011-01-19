@@ -431,9 +431,7 @@ sub readers {
 					} elsif (@s_addr) {
 						push @args, map { @$_ } values %resp_bulk_args;
 					} else {
-						foreach (values %resp_bulk_args) {
-							push @args, @$_;
-						}
+						push @args, map { @$_ } values %resp_bulk_args;
 					}
 				 	$write2client->($c, cmd2stream(@args));
 				} else {
