@@ -334,6 +334,7 @@ sub readers {
 	my %resp_line      = ();
 	my %resp_bulk_size = ();
 	my %resp_bulk_args = ();
+	my $size_all       = 0; 
 	my $servers_reader = get_servers_reader(
 		DEBUG   => 0,
 		servers => $servers,
@@ -352,6 +353,7 @@ sub readers {
 		sub_line_response          => sub { my ($s, $resp_line) = @_; $resp_line{$s} = $resp_line },
 		sub_bulk_response_size     => sub { my ($s, $resp_bulk_size) = @_; $resp_bulk_size{$s} = $resp_bulk_size },
 		sub_bulk_response_size_all => sub {
+			$size_all = 1;
 			if ($$cmd[0] eq "KEYS") {
 				my $resp_bulk_size;
 				$resp_bulk_size += $_ for grep { defined $_ } values %resp_bulk_size;
@@ -360,11 +362,15 @@ sub readers {
 				} else {
 					$write2client->($c, "*-1\015\012");
 				}
+				if (keys %resp_bulk_args) {
+					my $stream = args2stream(map { @$_ } values %resp_bulk_args);
+					$write2client->($c, $stream);
+				}
 			}
 		},
 		sub_bulk_response_arg      => sub {
 			my ($s, $arg) = @_;
-			if ($$cmd[0] eq "KEYS") {
+			if ($size_all and $$cmd[0] eq "KEYS") {
 				if (defined $arg) {
 					$write2client->($c, join "", '$', length $arg, "\015\012", $arg, "\015\012");
 				} else {
@@ -437,6 +443,7 @@ sub readers {
 			%resp_line      = ();
 			%resp_bulk_size = ();
 			%resp_bulk_args = ();
+			$size_all       = 0;
 		},
 	);
 
@@ -464,6 +471,16 @@ sub cmd2stream {
 		} @_;
 }
 
+sub args2stream {
+	join "",
+		map {
+			if (defined $_) {
+				('$', length $_, "\015\012", $_, "\015\012");
+			} else {
+				('$-1', "\015\012");
+			}
+		} @_;
+}
 
 
 1;
