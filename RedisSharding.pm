@@ -428,8 +428,6 @@ sub readers {
 						foreach my $s_addr (@s_addr) {
 							push @args, shift @{$resp_bulk_args{$s_addr}};
 						}
-					} elsif (@s_addr) {
-						push @args, map { @$_ } values %resp_bulk_args;
 					} else {
 						push @args, map { @$_ } values %resp_bulk_args;
 					}
