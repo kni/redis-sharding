@@ -37,7 +37,8 @@ sub connecter {
 my $fh_keys = connecter($from);
 my $fh_type = connecter($from);
 
-my %addr2fh = map { $_ => connecter($_) } split /\s*,\s*/, $nodes;
+my @servers = split /\s*,\s*/, $nodes;
+my %addr2fh = map { $_ => connecter($_) } @servers;
 
 my %fh2rw = ();
 my %fh2ww = ();
@@ -289,7 +290,7 @@ sub counter_show {
 			);
 			if (my $to_nodes = $to_nodes{$$cmd[0]}) {
 			 	my $k = shift @kv;
-			 	my $addr = RedisSharding::key2server($k, [keys %addr2fh]);
+			 	my $addr = RedisSharding::key2server($k, \@servers);
 				if ($DEBUG) {
 					require Data::Dumper;
 				 	print Data::Dumper::Dumper([$$cmd[0], $k, @v]);
