@@ -14,7 +14,7 @@ Redis Sharding is used for horizontal Redis database scaling (with connecting of
  Client 2 ---                \-- Redis (node 4)
                               \- Redis (node 5)
 
-Sharding is done based on the CRC32 checksum of a key or key tag.
+Sharding is done based on the CRC32 checksum of a key or key tag ("key{key_tag}").
 
 The majority of the commands are supported except the key renaming commands, 
 commands of working with sets, transactions, subscription and, of course, server configure. 
