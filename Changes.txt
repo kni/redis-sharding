@@ -1,2 +1,5 @@
+2011-03-11	0.2
+	the usage of RAM has been reduced
+
 2011-01-25	0.1
 	first production release

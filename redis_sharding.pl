@@ -1,3 +1,5 @@
+#!/usr/bin/perl
+
 $| = 1;
 use strict;
 use warnings;
@@ -69,6 +71,7 @@ sub clean_from_client {
 	}
 	delete $fh2rw{$c};
 	delete $fh2ww{$c};
+	delete $c2sw_stoped{$c};
 	delete $c2buf{$c};
 	delete $c2client_reader{$c};
 	delete $c2servers_reader{$c};
