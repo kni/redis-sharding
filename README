@@ -1,6 +1,12 @@
 Redis Sharding
 **************
 
+Nota bene.
+The  "Redis Sharding on Perl" project has been closed in favor of "Redis Sharding on Haskell" because the latter is 4 to 10 times more productive.
+
+Sharding
+--------
+
 https://github.com/kni/redis-sharding
 
 Redis Sharding is a multiplexed proxy-server, designed to work with the database divided to several servers.
