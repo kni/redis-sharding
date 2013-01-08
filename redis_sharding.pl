@@ -105,7 +105,7 @@ sub write2server {
 my $listener = IO::Socket::INET->new(
 	Proto => 'tcp', Blocking => 0,
 	LocalHost => $local_host, LocalPort => $local_port,
-	Listen => 20, ReuseAddr => 1
+	Listen => 200, ReuseAddr => 1
 ) or die $!;
 
 
