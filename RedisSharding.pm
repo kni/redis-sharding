@@ -22,13 +22,13 @@ sub get_client_reader {
 	my $buf           = "";
 	my $i             = 0;
 	my $args_cnt      = 0;
-	my $size_next_arg = 0;
+	my $size_next_arg = undef;
 	my @args          = ();
 
 	my $sub_clean = sub {
 		$i             = 0;
 		$args_cnt      = 0;
-		$size_next_arg = 0;
+		$size_next_arg = undef;
 		@args          = ();
 	};
 
@@ -52,7 +52,7 @@ sub get_client_reader {
 				}
 			}
 			return 1 unless length $buf > $i;
-			if ($args_cnt and not $size_next_arg) {
+			if ($args_cnt and not defined $size_next_arg) {
 				if ((index $buf, '$', $i) == $i) {
 					if ((my $_i = index $buf, "\015\012", $i + 1) > -1) {
 						$size_next_arg = substr $buf, $i + 1, $_i - ($i + 1);
@@ -66,13 +66,13 @@ sub get_client_reader {
 				}
 			}
 			return 1 unless length $buf > $i;
-			if ($args_cnt and $size_next_arg) {
+			if ($args_cnt and defined $size_next_arg) {
 				if ((index $buf, "\015\012", $i + $size_next_arg) == $i + $size_next_arg) {
 					my $arg = substr $buf, $i, $size_next_arg;
 					print "arg: $arg\n" if $DEBUG;
 					push @args, $arg;
 					$i = $i + $size_next_arg + 2;
-					$size_next_arg = 0;
+					$size_next_arg = undef;
 					if ($args_cnt == @args) {
 						print "NEXT COMMAND\n" if $DEBUG;
 						$sub_cmd->(@args);

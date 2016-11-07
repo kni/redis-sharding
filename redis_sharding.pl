@@ -1,4 +1,3 @@
-#!/usr/bin/perl
 
 $| = 1;
 use strict;
