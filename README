@@ -1,9 +1,9 @@
 Redis Sharding
 **************
 
-Nota bene.
-The  "Redis Sharding on Perl" project has been closed in favor of "Redis Sharding on Haskell" because the latter is 4 times more productive.
-http://github.com/kni/redis-sharding-hs
+Nota bene!
+
+The  "Redis Sharding on Perl" project has been closed in favor of "Redis Sharding on Haskell" because the latter is 4 times more productive (http://github.com/kni/redis-sharding-hs). Standard ML version (https://github.com/kni/redis-sharding-sml) is even more productive.
 
 Sharding
 --------
